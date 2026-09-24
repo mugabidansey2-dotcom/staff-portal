@@ -8,6 +8,63 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* --- Payment history & payslip additions (uses styles.css theme variables) --- */
+  .payment-history{ display:none; margin-top:18px; }
+  .ph-head h3{ font-size:20px; color:var(--navy); margin:0 0 4px; }
+  .ph-head p{ margin:0 0 18px; color:var(--muted); font-size:13.5px; }
+  .status-pill{
+    display:inline-block; padding:3px 10px; border-radius:999px;
+    font-size:11.5px; font-weight:600; background:#fff;
+  }
+  .status-pill.paid{ color:var(--navy); border:1px solid var(--navy); }
+  .status-pill.pending{ color:var(--danger); border:1px solid var(--danger); }
+  .btn-sm{ padding:7px 14px; font-size:13px; }
+  .ph-empty{ text-align:center; padding:40px 20px; color:var(--muted); font-size:13.5px; }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(16,36,62,.55);
+    display:none; align-items:center; justify-content:center; padding:24px; z-index:999;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    width:100%; max-width:640px; max-height:90vh; overflow:auto; padding:28px 30px;
+    box-shadow:0 30px 60px rgba(16,36,62,.28);
+  }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:12px; margin-bottom:20px; }
+
+  .payslip{ color:var(--ink); }
+  .payslip-header{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:16px;
+    border-bottom:2px solid var(--navy); padding-bottom:16px; margin-bottom:20px;
+  }
+  .payslip-header h2{ font-size:22px; color:var(--navy); margin:0 0 2px; }
+  .payslip-header .sub{ color:var(--muted); font-size:13px; margin:0; }
+  .payslip-header .period-tag{ text-align:right; font-size:13px; color:var(--ink); }
+  .payslip-meta{ display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin-bottom:18px; font-size:13.5px; }
+  .payslip-meta div span{ display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; margin-bottom:1px; }
+  .payslip-section-title{
+    font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); margin:18px 0 6px;
+  }
+  table.payslip-table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.payslip-table td{ padding:8px 4px; border-bottom:1px solid var(--line); }
+  table.payslip-table td:last-child{ text-align:right; font-variant-numeric:tabular-nums; }
+  .payslip-net{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-top:2px solid var(--navy); margin-top:14px; padding-top:14px;
+    font-weight:700; font-size:17px; color:var(--navy);
+  }
+  .payslip-note{ margin-top:20px; font-size:11.5px; color:var(--muted); line-height:1.5; }
+
+  @media print{
+    body *{ visibility:hidden; }
+    #payslipModal, #payslipModal *{ visibility:visible; }
+    #payslipModal{ position:absolute; top:0; left:0; width:100%; max-width:none; box-shadow:none; border-radius:0; padding:20px 30px; }
+    .no-print{ display:none !important; }
+  }
+</style>
 </head>
 <body>
 
@@ -24,6 +81,7 @@
       <button data-tab="register" class="active"><span class="dot"></span>Register Employee</button>
       <button data-tab="login"><span class="dot"></span>Staff Login</button>
       <button data-tab="search"><span class="dot"></span>Search Employees</button>
+      <button data-tab="payroll"><span class="dot"></span>Payroll</button>
     </nav>
     <div class="side-stat">
       <div class="num" id="statCount">0</div>
@@ -159,8 +217,40 @@
           <p id="welcomeMeta">—</p>
           <span class="tag" id="welcomeDept">—</span>
         </div>
+
+        <div class="card payment-history" id="paymentHistoryCard">
+          <div class="ph-head">
+            <h3>Payment history</h3>
+            <p>Your salary payments to date. Select a month to view or print the payslip.</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Reference</th>
+                  <th>Net pay (UGX)</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="paymentHistoryBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
+
+    <!-- PAYSLIP MODAL -->
+    <div class="modal-overlay" id="payslipOverlay">
+      <div class="modal" id="payslipModal">
+        <div class="modal-actions no-print">
+          <button type="button" class="btn btn-primary" id="printPayslipBtn">Print payslip</button>
+          <button type="button" class="btn btn-ghost" id="closePayslipBtn">Close</button>
+        </div>
+        <div class="payslip" id="payslipContent"></div>
+      </div>
+    </div>
 
     <!-- SEARCH PANEL -->
     <section class="panel" id="panel-search">
@@ -200,6 +290,56 @@
         <div class="empty-state" id="emptyState" style="display:none;">
           <div class="big">🗂️</div>
           <div>No employees match your search yet.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAYROLL PANEL -->
+    <section class="panel" id="panel-payroll">
+      <div class="panel-head">
+        <h2>Payroll Processing</h2>
+        <p>Review each employee's pay for a month, process the payroll run, then print a payment receipt per employee.</p>
+      </div>
+
+      <div class="banner" id="payBanner"></div>
+
+      <div class="pay-controls">
+        <div class="field">
+          <label for="payMonth">Pay period</label>
+          <input id="payMonth" type="month" />
+        </div>
+        <button type="button" class="btn btn-primary" id="processPayrollBtn">Process payroll</button>
+        <span class="status-pill pending" id="payRunStatus">Not processed</span>
+      </div>
+
+      <div class="pay-summary">
+        <div class="pay-stat"><span>Employees</span><strong id="payCount">0</strong></div>
+        <div class="pay-stat"><span>Total gross</span><strong id="payGross">UGX 0</strong></div>
+        <div class="pay-stat"><span>Total deductions</span><strong id="payDeductions">UGX 0</strong></div>
+        <div class="pay-stat"><span>Total net pay</span><strong id="payNet">UGX 0</strong></div>
+      </div>
+
+      <div class="card" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee ID</th>
+                <th>Name</th>
+                <th>Department</th>
+                <th class="num-cell">Gross</th>
+                <th class="num-cell">NSSF</th>
+                <th class="num-cell">PAYE</th>
+                <th class="num-cell">Net pay</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="payrollBody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="payEmpty" style="display:none;">
+          <div class="big">💼</div>
+          <div>No employees were on the payroll for this period.</div>
         </div>
       </div>
     </section>
@@ -245,6 +385,7 @@
       btn.classList.add("active");
       document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
       if (btn.dataset.tab === "search") renderResults();
+      if (btn.dataset.tab === "payroll") renderPayroll();
     });
   });
 
@@ -339,6 +480,8 @@
     ev.preventDefault();
     loginBanner.className = "banner";
     welcomeCard.classList.remove("show");
+    paymentHistoryCard.style.display = "none";
+    payslipOverlay.classList.remove("show");
 
     var user = loginForm.loginUser.value.trim();
     var pass = loginForm.loginPass.value;
@@ -357,6 +500,260 @@
     document.getElementById("welcomeDept").textContent = match.department;
     welcomeCard.classList.add("show");
     showBanner(loginBanner, "ok", "Signed in successfully.");
+
+    renderPaymentHistory(match);
+  });
+
+  // ---------- Payment history & payslip ----------
+  var paymentHistoryCard = document.getElementById("paymentHistoryCard");
+  var paymentHistoryBody = document.getElementById("paymentHistoryBody");
+  var payslipOverlay = document.getElementById("payslipOverlay");
+  var payslipModal = document.getElementById("payslipModal");
+  var payslipContent = document.getElementById("payslipContent");
+  var printPayslipBtn = document.getElementById("printPayslipBtn");
+  var closePayslipBtn = document.getElementById("closePayslipBtn");
+
+  var currentPaymentRecords = [];
+  var currentPayslipEmployee = null;
+
+  function formatUGX(n) {
+    return "UGX " + Math.round(n).toLocaleString("en-UG");
+  }
+
+  // Uganda resident monthly PAYE bands (illustrative — effective 1 Jul 2026 amendment).
+  // Verify against current URA guidance before using for real payroll.
+  function calcPAYE(gross) {
+    if (gross <= 335000) return 0;
+    if (gross <= 410000) return (gross - 335000) * 0.20;
+    if (gross <= 485000) return 15000 + (gross - 410000) * 0.25;
+    if (gross <= 10000000) return 33750 + (gross - 485000) * 0.30;
+    return 33750 + (10000000 - 485000) * 0.30 + (gross - 10000000) * 0.40;
+  }
+
+  function calcNSSF(gross) {
+    return gross * 0.05;
+  }
+
+  function monthsSinceJoin(joinDateStr) {
+    var start = joinDateStr ? new Date(joinDateStr) : new Date();
+    if (isNaN(start.getTime())) start = new Date();
+    var today = new Date();
+    var cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    var end = new Date(today.getFullYear(), today.getMonth(), 1);
+    var months = [];
+    while (cursor <= end) {
+      months.push(new Date(cursor));
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return months.slice(-12).reverse(); // most recent first, capped at 12
+  }
+
+  function generatePaymentHistory(emp) {
+    var salary = Number(emp.salary) || 0;
+    var today = new Date();
+    var curYm = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0");
+
+    var runs = loadRuns();
+    return monthsSinceJoin(emp.joinDate).map(function (d) {
+      var rec = buildRecord(emp, d);
+      rec.status = (runs[rec.ym] || rec.ym !== curYm) ? "Paid" : "Pending";
+      return rec;
+    });
+  }
+
+  function buildRecord(emp, d) {
+    var gross = Number(emp.salary) || 0;
+    var nssf = calcNSSF(gross);
+    var paye = calcPAYE(gross);
+    var ym = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    return {
+      period: d.toLocaleString("en-GB", { month: "long", year: "numeric" }),
+      ym: ym,
+      gross: gross,
+      nssf: nssf,
+      paye: paye,
+      net: gross - nssf - paye,
+      reference: "PAY-" + emp.id.toUpperCase() + "-" + ym.replace("-", ""),
+      status: "Pending"
+    };
+  }
+
+  // Payroll runs already processed, keyed by "YYYY-MM"
+  var RUNS_KEY = "staffPortal.payrollRuns.v1";
+  function loadRuns() {
+    try { var raw = localStorage.getItem(RUNS_KEY); return raw ? JSON.parse(raw) : {}; }
+    catch (e) { return {}; }
+  }
+  function saveRuns(runs) {
+    try { localStorage.setItem(RUNS_KEY, JSON.stringify(runs)); return true; }
+    catch (e) { console.error("Could not save payroll run:", e); return false; }
+  }
+
+  function renderPaymentHistory(emp) {
+    currentPayslipEmployee = emp;
+    currentPaymentRecords = generatePaymentHistory(emp);
+    paymentHistoryBody.innerHTML = "";
+
+    if (currentPaymentRecords.length === 0) {
+      paymentHistoryBody.innerHTML =
+        '<tr><td colspan="5"><div class="ph-empty">No payment records yet.</div></td></tr>';
+    } else {
+      currentPaymentRecords.forEach(function (r) {
+        var tr = document.createElement("tr");
+        var pillClass = r.status === "Paid" ? "paid" : "pending";
+        tr.innerHTML =
+          "<td>" + escapeHtml(r.period) + "</td>" +
+          "<td>" + escapeHtml(r.reference) + "</td>" +
+          "<td>" + formatUGX(r.net) + "</td>" +
+          "<td><span class='status-pill " + pillClass + "'>" + r.status + "</span></td>" +
+          "<td><button type='button' class='btn btn-ghost btn-sm' data-ym='" + r.ym + "'>View / print</button></td>";
+        paymentHistoryBody.appendChild(tr);
+      });
+    }
+    paymentHistoryCard.style.display = "block";
+  }
+
+  paymentHistoryBody.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("button[data-ym]");
+    if (!btn || !currentPayslipEmployee) return;
+    var rec = currentPaymentRecords.find(function (r) { return r.ym === btn.dataset.ym; });
+    if (rec) openPayslip(currentPayslipEmployee, rec, false);
+  });
+
+  function openPayslip(emp, rec, isReceipt) {
+    var docTitle = isReceipt ? "Payment Receipt" : "Employee Payslip";
+    printPayslipBtn.textContent = isReceipt ? "Print receipt" : "Print payslip";
+    payslipContent.innerHTML =
+      '<div class="payslip-header">' +
+        '<div><h2>' + docTitle + '</h2><p class="sub">Staff Portal Payroll</p></div>' +
+        '<div class="period-tag"><div>' + escapeHtml(rec.period) + '</div><div>Ref: ' + escapeHtml(rec.reference) + '</div></div>' +
+      '</div>' +
+      '<div class="payslip-meta">' +
+        '<div><span>Employee name</span>' + escapeHtml(emp.name) + '</div>' +
+        '<div><span>Employee ID</span>' + escapeHtml(emp.id) + '</div>' +
+        '<div><span>Department</span>' + escapeHtml(emp.department) + '</div>' +
+        '<div><span>Position</span>' + escapeHtml(emp.position) + '</div>' +
+        '<div><span>Bank account</span>' + escapeHtml(emp.bank || "—") + '</div>' +
+        '<div><span>Payment status</span>' + escapeHtml(rec.status) + '</div>' +
+      '</div>' +
+      '<div class="payslip-section-title">Earnings</div>' +
+      '<table class="payslip-table"><tbody>' +
+        '<tr><td>Basic salary</td><td>' + formatUGX(rec.gross) + '</td></tr>' +
+        '<tr><td><strong>Gross pay</strong></td><td><strong>' + formatUGX(rec.gross) + '</strong></td></tr>' +
+      '</tbody></table>' +
+      '<div class="payslip-section-title">Deductions</div>' +
+      '<table class="payslip-table"><tbody>' +
+        '<tr><td>NSSF (employee, 5%)</td><td>-' + formatUGX(rec.nssf) + '</td></tr>' +
+        '<tr><td>PAYE</td><td>-' + formatUGX(rec.paye) + '</td></tr>' +
+      '</tbody></table>' +
+      '<div class="payslip-net"><span>Net pay</span><span>' + formatUGX(rec.net) + '</span></div>' +
+      '<p class="payslip-note">Deductions are calculated using illustrative Uganda PAYE bands and a flat 5% NSSF employee rate. Confirm current rates with URA/NSSF before relying on this for actual payroll. Generated ' + new Date().toLocaleDateString("en-GB") + '.</p>';
+
+    payslipOverlay.classList.add("show");
+  }
+
+  printPayslipBtn.addEventListener("click", function () { window.print(); });
+  closePayslipBtn.addEventListener("click", function () { payslipOverlay.classList.remove("show"); });
+  payslipOverlay.addEventListener("click", function (ev) {
+    if (ev.target === payslipOverlay) payslipOverlay.classList.remove("show");
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") payslipOverlay.classList.remove("show");
+  });
+
+  // ---------- Payroll screen ----------
+  var payMonth = document.getElementById("payMonth");
+  var payBanner = document.getElementById("payBanner");
+  var payrollBody = document.getElementById("payrollBody");
+  var payEmpty = document.getElementById("payEmpty");
+  var payRunStatus = document.getElementById("payRunStatus");
+  var processPayrollBtn = document.getElementById("processPayrollBtn");
+  var payrollRecords = [];
+
+  (function initMonth() {
+    var t = new Date();
+    var cur = t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0");
+    payMonth.value = cur;
+    payMonth.max = cur;
+  })();
+
+  function payrollForMonth(ym) {
+    var parts = ym.split("-");
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+    var out = [];
+    employees.forEach(function (emp) {
+      var j = emp.joinDate ? new Date(emp.joinDate) : null;
+      if (j && !isNaN(j.getTime()) && new Date(j.getFullYear(), j.getMonth(), 1) > d) return; // not yet joined
+      out.push({ emp: emp, rec: buildRecord(emp, d) });
+    });
+    return out;
+  }
+
+  function renderPayroll() {
+    var ym = payMonth.value;
+    if (!ym) return;
+    var runs = loadRuns();
+    var processed = !!runs[ym];
+    payrollRecords = payrollForMonth(ym);
+
+    payRunStatus.textContent = processed ? "Processed" : "Not processed";
+    payRunStatus.className = "status-pill " + (processed ? "paid" : "pending");
+    processPayrollBtn.disabled = processed || payrollRecords.length === 0;
+    processPayrollBtn.textContent = processed ? "Payroll processed" : "Process payroll";
+
+    var gross = 0, ded = 0, net = 0;
+    payrollBody.innerHTML = "";
+    payrollRecords.forEach(function (row, i) {
+      gross += row.rec.gross; ded += row.rec.nssf + row.rec.paye; net += row.rec.net;
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + escapeHtml(row.emp.id) + "</td>" +
+        "<td>" + escapeHtml(row.emp.name) + "</td>" +
+        "<td>" + escapeHtml(row.emp.department) + "</td>" +
+        "<td class='num-cell'>" + formatUGX(row.rec.gross) + "</td>" +
+        "<td class='num-cell'>" + formatUGX(row.rec.nssf) + "</td>" +
+        "<td class='num-cell'>" + formatUGX(row.rec.paye) + "</td>" +
+        "<td class='num-cell'><strong>" + formatUGX(row.rec.net) + "</strong></td>" +
+        "<td><button type='button' class='btn btn-ghost btn-sm' data-idx='" + i + "'" +
+          (processed ? "" : " disabled title='Process the payroll first'") + ">Print receipt</button></td>";
+      payrollBody.appendChild(tr);
+    });
+
+    document.getElementById("payCount").textContent = payrollRecords.length;
+    document.getElementById("payGross").textContent = formatUGX(gross);
+    document.getElementById("payDeductions").textContent = formatUGX(ded);
+    document.getElementById("payNet").textContent = formatUGX(net);
+    payEmpty.style.display = payrollRecords.length ? "none" : "block";
+    if (!payrollRecords.length) {
+      payEmpty.querySelector("div:last-child").textContent = employees.length
+        ? "No employees were on the payroll for this period."
+        : "No employees registered yet — add one from the Register panel.";
+    }
+  }
+
+  payMonth.addEventListener("change", function () { payBanner.className = "banner"; renderPayroll(); });
+
+  processPayrollBtn.addEventListener("click", function () {
+    var ym = payMonth.value;
+    if (!ym || payrollRecords.length === 0) return;
+    var runs = loadRuns();
+    if (runs[ym]) return;
+    var total = payrollRecords.reduce(function (a, r) { return a + r.rec.net; }, 0);
+    runs[ym] = { processedAt: new Date().toISOString(), count: payrollRecords.length, totalNet: total };
+    var saved = saveRuns(runs);
+    renderPayroll();
+    showBanner(payBanner, "ok", "Payroll for " + payrollRecords[0].rec.period + " processed for " +
+      payrollRecords.length + " employee" + (payrollRecords.length === 1 ? "" : "s") +
+      ". Total net pay " + formatUGX(total) + "." + (saved ? "" : " (Could not be saved to storage.)"));
+  });
+
+  payrollBody.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("button[data-idx]");
+    if (!btn || btn.disabled) return;
+    var row = payrollRecords[Number(btn.dataset.idx)];
+    if (!row) return;
+    var rec = Object.assign({}, row.rec, { status: "Paid" });
+    openPayslip(row.emp, rec, true);
   });
 
   // ---------- Search ----------
